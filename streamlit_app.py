@@ -23,7 +23,11 @@ if st.session_state.page == "page1":
     st.header("📄 ขั้นตอนที่ 1: ระบุเอกสารใบคุมพาเลท")
 
     ocr_text = st.text_input("โปรดระบุเลขที่ใบคุมพาเลท (ไม่ต้องใส่ PT) เช่น 1234")
-    doc_image = st.camera_input("ถ่ายรูปเอกสารใบคุมพาเลท")
+    doc_image = st.camera_input("📸 ถ่ายรูปเอกสารใบคุมพาเลท")
+
+    # แสดงภาพ preview ถ้ามี
+    if doc_image:
+        st.image(doc_image, caption="📄 ภาพเอกสารที่ถ่ายไว้", use_column_width=True)
 
     if st.button("➡️ ถัดไป (ไปหน้าถ่ายพาเลท)"):
         if not ocr_text:
@@ -34,7 +38,7 @@ if st.session_state.page == "page1":
             st.session_state.ocr_text = ocr_text
             st.session_state.doc_image = doc_image
             st.session_state.page = "page2"
-            st.experimental_rerun()
+            st.rerun()
 
 # ==========================
 # 📦 PAGE 2: ถ่ายพาเลท + ตรวจจับ + บันทึก
@@ -42,7 +46,11 @@ if st.session_state.page == "page1":
 elif st.session_state.page == "page2":
     st.header("📦 ขั้นตอนที่ 2: ตรวจนับพาเลท")
 
-    pallet_image_file = st.camera_input("ถ่ายรูปพาเลท 1 ด้าน")
+    # แสดงข้อมูลจากหน้าแรก
+    st.markdown(f"**เลขที่ใบคุมพาเลท:** `{st.session_state.ocr_text}`")
+    st.image(st.session_state.doc_image, caption="📄 เอกสารใบคุมพาเลท", use_column_width=True)
+
+    pallet_image_file = st.camera_input("📸 ถ่ายรูปพาเลท 1 ด้าน")
 
     detected_count = 0
     if pallet_image_file:
@@ -64,10 +72,12 @@ elif st.session_state.page == "page2":
 
     pallet_count = st.number_input("โปรดยืนยันจำนวนพาเลท", value=detected_count, step=1)
 
+    # ปุ่มย้อนกลับ
     if st.button("⬅️ กลับไปหน้าเอกสาร"):
         st.session_state.page = "page1"
-        st.experimental_rerun()
+        st.rerun()
 
+    # ปุ่มบันทึกข้อมูล
     if st.button("✅ ยืนยันและบันทึกข้อมูล"):
         try:
             scopes = [
@@ -79,6 +89,7 @@ elif st.session_state.page == "page2":
             sheet = gc.open_by_key("1GR4AH-WFQCA9YGma6g3t0APK8xfMW8DZZkBQAqHWg68").sheet1
             drive_service = build("drive", "v3", credentials=creds)
 
+            # === ค้นหาหรือสร้างโฟลเดอร์ ===
             folder_name = "Pallet"
             query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
             results = drive_service.files().list(q=query, spaces='drive', fields='files(id)').execute()
@@ -91,6 +102,7 @@ elif st.session_state.page == "page2":
                 ).execute()
                 folder_id = folder['id']
 
+            # === ฟังก์ชันอัปโหลดภาพ ===
             def upload_image(file_obj, prefix):
                 if not file_obj:
                     return "No Image"
@@ -107,12 +119,13 @@ elif st.session_state.page == "page2":
             doc_link = upload_image(st.session_state.doc_image, "Document")
             pallet_link = upload_image(pallet_image_file, "Pallet")
 
+            # === บันทึกลง Google Sheet ===
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             row = [timestamp, st.session_state.ocr_text, detected_count, pallet_count, doc_link, pallet_link]
             sheet.append_row(row)
 
             st.success("✅ บันทึกข้อมูลเรียบร้อยแล้ว!")
-
+            
 
         except Exception as e:
             st.error(f"❌ ไม่สามารถบันทึกข้อมูลได้: {e}")
