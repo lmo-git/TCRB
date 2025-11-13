@@ -1,11 +1,6 @@
 streamlit
 pillow
 numpy
-easyocr
-torch
-torchvision
-scikit-image
-imageio
 gspread
 google-auth
 google-auth-oauthlib

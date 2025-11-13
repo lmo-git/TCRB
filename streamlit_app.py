@@ -1,12 +1,11 @@
 import streamlit as st
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image
 import numpy as np
 import uuid
 import datetime
 import gspread
 import requests
 import re
-import easyocr
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -34,9 +33,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# OCR Reader
-reader = easyocr.Reader(['en', 'th'], gpu=False)
-
 # ======================================================
 # TITLE
 # ======================================================
@@ -53,78 +49,64 @@ if "pt_list" not in st.session_state:
 
 
 # ======================================================
-# Extract PT number from text
+# Extract PT number
 # ======================================================
 def extract_pt_number(text):
-    match = re.search(r"PT(\d+)", text)
+    """
+    รับข้อความ เช่น 'PT68020045'
+    → คืนค่า '68020045'
+    """
+    match = re.search(r"PT(\d+)", text.upper())
     if match:
         return match.group(1)
     return None
 
 
-def add_pt(pt_raw):
-    pt = extract_pt_number(pt_raw)
+# ฟังก์ชันเพิ่ม PT
+def add_pt_manual(pt_text):
+    pt = extract_pt_number(pt_text)
     if pt:
         if pt not in st.session_state.pt_list:
             if len(st.session_state.pt_list) < 4:
                 st.session_state.pt_list.append(pt)
                 st.success(f"เพิ่ม PT: PT{pt}")
             else:
-                st.warning("เก็บได้สูงสุด 4 PT เท่านั้น")
+                st.warning("เพิ่มได้สูงสุด 4 PT เท่านั้น")
         else:
-            st.info("เลข PT นี้มีอยู่แล้ว")
+            st.info("เลขนี้มีอยู่แล้ว")
     else:
-        st.error("❌ ไม่พบเลขหลัง PT")
+        st.error("❌ กรุณาพิมพ์รูปแบบ PTxxxxxxx เช่น PT68020045")
 
 
 # ======================================================
-# PAGE 1 — SCAN PT (OCR)
+# PAGE 1 — Manual PT Input
 # ======================================================
 if st.session_state.page == "page1":
 
-    st.header("📄 ขั้นตอนที่ 1: อ่านเลข PT จากภาพ (สูงสุด 4 ค่า)")
+    st.header("📄 ขั้นตอนที่ 1: กรอกเลข PT (สูงสุด 4 ค่า)")
 
-    pt_image = st.camera_input("📸 ถ่ายภาพที่มีเลข PT")
+    pt_input = st.text_input("พิมพ์เลข PT เช่น PT68020045")
 
-    if pt_image:
-        # เปิดรูป
-        img = Image.open(pt_image).convert("RGB")
+    if st.button("➕ เพิ่มเลข PT"):
+        add_pt_manual(pt_input)
 
-        # Preprocessing
-        img = img.filter(ImageFilter.SHARPEN)
-        img = ImageEnhance.Sharpness(img).enhance(3.0)
-        img = ImageEnhance.Contrast(img).enhance(1.8)
-
-        # Resize upscale
-        w, h = img.size
-        img = img.resize((w * 2, h * 2))
-
-        # OCR
-        result = reader.readtext(np.array(img), detail=0)
-        text = " ".join(result)
-
-        st.write("📝 ข้อความ OCR:", text)
-
-        # Extract PT
-        add_pt(text)
-
-    # แสดง PT ที่เก็บได้
+    # แสดง PT ที่มีแล้ว
     st.subheader("📌 รายการ PT:")
     if st.session_state.pt_list:
         for i, pt in enumerate(st.session_state.pt_list, 1):
             st.write(f"{i}. PT{pt}")
     else:
-        st.info("ยังไม่มี PT ที่อ่านได้")
+        st.info("ยังไม่มี PT")
 
     # ปุ่มล้าง
-    if st.button("🗑 ล้างทั้งหมด"):
+    if st.button("🗑 ล้าง PT ทั้งหมด"):
         st.session_state.pt_list = []
         st.rerun()
 
     # ไปหน้า 2
     if st.button("➡️ ถัดไป (ไปถ่ายพาเลท)"):
         if len(st.session_state.pt_list) == 0:
-            st.warning("โปรดสแกน PT อย่างน้อย 1 ค่า")
+            st.warning("โปรดกรอก PT อย่างน้อย 1 ค่า")
         else:
             st.session_state.page = "page2"
             st.rerun()
@@ -137,7 +119,7 @@ elif st.session_state.page == "page2":
 
     st.header("📦 ขั้นตอนที่ 2: ตรวจนับพาเลท")
 
-    st.subheader("📌 PT ที่สแกนแล้ว:")
+    st.subheader("📌 PT ที่บันทึกแล้ว:")
     for pt in st.session_state.pt_list:
         st.code(f"PT{pt}")
 
@@ -148,28 +130,27 @@ elif st.session_state.page == "page2":
 
     if pallet_image:
         bytes_data = pallet_image.getvalue()
-        temp_file = "pallet_temp.jpg"
 
-        with open(temp_file, "wb") as f:
+        with open("pallet_temp.jpg", "wb") as f:
             f.write(bytes_data)
 
         try:
             response = requests.post(
                 "https://detect.roboflow.com/pallet-detection-measurement/1?api_key=WtsFf6wpMhlX16yRNb6e",
-                files={"file": open(temp_file, "rb")},
+                files={"file": open("pallet_temp.jpg", "rb")},
                 timeout=20
             )
-            predictions = response.json().get("predictions", [])
-            detected_count = len(predictions)
+            preds = response.json().get("predictions", [])
+            detected_count = len(preds)
 
             st.success(f"🎯 AI ตรวจจับพาเลทได้ {detected_count} กอง")
         except Exception as e:
             st.error(f"เกิดข้อผิดพลาด: {e}")
 
-    pallet_count = st.number_input("จำนวนพาเลทที่ยืนยัน:", value=detected_count, step=1)
+    pallet_count = st.number_input("จำนวนพาเลทที่ต้องการยืนยัน:", value=detected_count, step=1)
 
     # ปุ่มย้อนกลับ
-    if st.button("⬅️ กลับไปอ่าน PT"):
+    if st.button("⬅️ กลับไปกรอก PT"):
         st.session_state.page = "page1"
         st.rerun()
 
@@ -178,8 +159,9 @@ elif st.session_state.page == "page2":
     # SAVE DATA
     # ======================================================
     if st.button("✅ ยืนยันและบันทึกข้อมูล"):
+
         if bytes_data is None:
-            st.warning("กรุณาถ่ายรูปพาเลทก่อน")
+            st.warning("⚠ กรุณาถ่ายรูปพาเลทก่อน")
         else:
             try:
                 # Google Auth
@@ -192,7 +174,7 @@ elif st.session_state.page == "page2":
                 sheet = gc.open_by_key("1GR4AH-WFQCA9YGma6g3t0APK8xfMW8DZZkBQAqHWg68").sheet1
                 drive_service = build("drive", "v3", credentials=creds)
 
-                # Google Drive folder
+                # หาโฟลเดอร์
                 folder_name = "Pallet"
                 result = drive_service.files().list(
                     q=f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'",
@@ -209,19 +191,20 @@ elif st.session_state.page == "page2":
 
                 # Upload function
                 def upload_to_drive(file_bytes, prefix):
-                    file_name = f"{prefix}_{uuid.uuid4().hex}.jpg"
-                    with open(file_name, "wb") as f:
+                    fname = f"{prefix}_{uuid.uuid4().hex}.jpg"
+                    with open(fname, "wb") as f:
                         f.write(file_bytes)
 
-                    media = MediaFileUpload(file_name, mimetype="image/jpeg")
+                    media = MediaFileUpload(fname, mimetype="image/jpeg")
                     uploaded = drive_service.files().create(
-                        body={"name": file_name, "parents": [folder_id]},
+                        body={"name": fname, "parents": [folder_id]},
                         media_body=media,
                         fields="id"
                     ).execute()
 
                     return f"https://drive.google.com/file/d/{uploaded['id']}/view"
 
+                # Upload pallet image
                 pallet_link = upload_to_drive(bytes_data, "PALLET")
 
                 # PT list → fill to 4 columns
@@ -231,6 +214,7 @@ elif st.session_state.page == "page2":
 
                 now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+                # Append row
                 sheet.append_row([
                     now,
                     pt_vals[0],
