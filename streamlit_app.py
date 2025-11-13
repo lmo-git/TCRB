@@ -56,7 +56,8 @@ def extract_pt_number(text):
     รับข้อความ เช่น 'PT68020045'
     → คืนค่า '68020045'
     """
-    match = re.search(r"PT(\d+)", text.upper())
+    text = text.upper().strip()
+    match = re.search(r"PT(\d+)", text)
     if match:
         return match.group(1)
     return None
@@ -79,13 +80,13 @@ def add_pt_manual(pt_text):
 
 
 # ======================================================
-# PAGE 1 — Manual PT Input
+# PAGE 1 — Manual PT Input (NOT REQUIRED)
 # ======================================================
 if st.session_state.page == "page1":
 
-    st.header("📄 ขั้นตอนที่ 1: กรอกเลข PT (สูงสุด 4 ค่า)")
+    st.header("📄 ขั้นตอนที่ 1: กรอกเลข PT (ไม่บังคับ, สูงสุด 4 ค่า)")
 
-    pt_input = st.text_input("พิมพ์เลข PT เช่น PT68020045")
+    pt_input = st.text_input("พิมพ์เลข PT (เช่น PT68020045)")
 
     if st.button("➕ เพิ่มเลข PT"):
         add_pt_manual(pt_input)
@@ -96,20 +97,17 @@ if st.session_state.page == "page1":
         for i, pt in enumerate(st.session_state.pt_list, 1):
             st.write(f"{i}. PT{pt}")
     else:
-        st.info("ยังไม่มี PT")
+        st.info("ยังไม่มี PT (ข้ามได้)")
 
     # ปุ่มล้าง
     if st.button("🗑 ล้าง PT ทั้งหมด"):
         st.session_state.pt_list = []
         st.rerun()
 
-    # ไปหน้า 2
+    # ไปหน้า 2 (ไม่บังคับให้มี PT)
     if st.button("➡️ ถัดไป (ไปถ่ายพาเลท)"):
-        if len(st.session_state.pt_list) == 0:
-            st.warning("โปรดกรอก PT อย่างน้อย 1 ค่า")
-        else:
-            st.session_state.page = "page2"
-            st.rerun()
+        st.session_state.page = "page2"
+        st.rerun()
 
 
 # ======================================================
@@ -120,8 +118,11 @@ elif st.session_state.page == "page2":
     st.header("📦 ขั้นตอนที่ 2: ตรวจนับพาเลท")
 
     st.subheader("📌 PT ที่บันทึกแล้ว:")
-    for pt in st.session_state.pt_list:
-        st.code(f"PT{pt}")
+    if st.session_state.pt_list:
+        for pt in st.session_state.pt_list:
+            st.code(f"PT{pt}")
+    else:
+        st.info("ไม่มี PT (ข้ามได้)")
 
     pallet_image = st.camera_input("📸 ถ่ายรูปพาเลท")
 
@@ -214,7 +215,7 @@ elif st.session_state.page == "page2":
 
                 now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-                # Append row
+                # Append row into Google Sheet
                 sheet.append_row([
                     now,
                     pt_vals[0],
