@@ -33,10 +33,12 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+
 # ======================================================
 # TITLE
 # ======================================================
 st.title("📦 AI นับพาเลท TCRB")
+
 
 # ======================================================
 # SESSION INIT
@@ -49,62 +51,63 @@ if "pt_list" not in st.session_state:
 
 
 # ======================================================
-# Extract PT number
+# Extract ANY number
+# Example:
+# "PT20045" → "20045"
+# "20045" → "20045"
+# "คำสั่งงาน 99887 เรื่อง..." → "99887"
+# No number → None
 # ======================================================
-def extract_pt_number(text):
-    """
-    รับข้อความ เช่น 'PT68020045'
-    → คืนค่า '68020045'
-    """
-    text = text.upper().strip()
-    match = re.search(r"PT(\d+)", text)
-    if match:
-        return match.group(1)
+def extract_number(text):
+    nums = re.findall(r"\d+", text)
+    if nums:
+        return nums[0]   # ใช้เลขชุดแรก
     return None
 
 
-# ฟังก์ชันเพิ่ม PT
+# Add PT manually (no rules)
 def add_pt_manual(pt_text):
-    pt = extract_pt_number(pt_text)
-    if pt:
-        if pt not in st.session_state.pt_list:
+    number = extract_number(pt_text)
+
+    if number:
+        if number not in st.session_state.pt_list:
             if len(st.session_state.pt_list) < 4:
-                st.session_state.pt_list.append(pt)
-                st.success(f"เพิ่ม PT: PT{pt}")
+                st.session_state.pt_list.append(number)
+                st.success(f"เพิ่มเลข: {number}")
             else:
-                st.warning("เพิ่มได้สูงสุด 4 PT เท่านั้น")
+                st.warning("เพิ่มได้สูงสุด 4 ค่า")
         else:
             st.info("เลขนี้มีอยู่แล้ว")
     else:
-        st.error("❌ กรุณาพิมพ์รูปแบบ PTxxxxxxx เช่น PT68020045")
+        st.info("ไม่มีตัวเลขในข้อความ — ข้ามรายการนี้")
 
 
 # ======================================================
-# PAGE 1 — Manual PT Input (NOT REQUIRED)
+# PAGE 1 — INPUT PT (optional)
 # ======================================================
 if st.session_state.page == "page1":
 
     st.header("📄 ขั้นตอนที่ 1: กรอกเลข PT (ไม่บังคับ, สูงสุด 4 ค่า)")
 
-    pt_input = st.text_input("พิมพ์เลข PT (เช่น PT68020045)")
+    pt_input = st.text_input("พิมพ์เลข เช่น 20045 หรือ PT20045")
 
-    if st.button("➕ เพิ่มเลข PT"):
+    if st.button("➕ เพิ่มเลข"):
         add_pt_manual(pt_input)
 
-    # แสดง PT ที่มีแล้ว
-    st.subheader("📌 รายการ PT:")
+    # แสดงรายการ PT
+    st.subheader("📌 รายการเลขที่เพิ่มแล้ว:")
     if st.session_state.pt_list:
         for i, pt in enumerate(st.session_state.pt_list, 1):
-            st.write(f"{i}. PT{pt}")
+            st.write(f"{i}. {pt}")
     else:
-        st.info("ยังไม่มี PT (ข้ามได้)")
+        st.info("ยังไม่มีเลข (สามารถข้ามได้)")
 
     # ปุ่มล้าง
-    if st.button("🗑 ล้าง PT ทั้งหมด"):
+    if st.button("🗑 ล้างทั้งหมด"):
         st.session_state.pt_list = []
         st.rerun()
 
-    # ไปหน้า 2 (ไม่บังคับให้มี PT)
+    # ไปหน้า 2
     if st.button("➡️ ถัดไป (ไปถ่ายพาเลท)"):
         st.session_state.page = "page2"
         st.rerun()
@@ -117,12 +120,12 @@ elif st.session_state.page == "page2":
 
     st.header("📦 ขั้นตอนที่ 2: ตรวจนับพาเลท")
 
-    st.subheader("📌 PT ที่บันทึกแล้ว:")
+    st.subheader("📌 เลขที่กรอกมา:")
     if st.session_state.pt_list:
         for pt in st.session_state.pt_list:
-            st.code(f"PT{pt}")
+            st.code(pt)
     else:
-        st.info("ไม่มี PT (ข้ามได้)")
+        st.info("ไม่ได้กรอกเลข (ข้ามได้)")
 
     pallet_image = st.camera_input("📸 ถ่ายรูปพาเลท")
 
@@ -148,10 +151,10 @@ elif st.session_state.page == "page2":
         except Exception as e:
             st.error(f"เกิดข้อผิดพลาด: {e}")
 
-    pallet_count = st.number_input("จำนวนพาเลทที่ต้องการยืนยัน:", value=detected_count, step=1)
+    pallet_count = st.number_input("จำนวนพาเลทที่ยืนยัน:", value=detected_count, step=1)
 
-    # ปุ่มย้อนกลับ
-    if st.button("⬅️ กลับไปกรอก PT"):
+    # ย้อนกลับ
+    if st.button("⬅️ กลับไปกรอกเลข"):
         st.session_state.page = "page1"
         st.rerun()
 
@@ -175,7 +178,7 @@ elif st.session_state.page == "page2":
                 sheet = gc.open_by_key("1GR4AH-WFQCA9YGma6g3t0APK8xfMW8DZZkBQAqHWg68").sheet1
                 drive_service = build("drive", "v3", credentials=creds)
 
-                # หาโฟลเดอร์
+                # Create/find folder
                 folder_name = "Pallet"
                 result = drive_service.files().list(
                     q=f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'",
@@ -190,32 +193,31 @@ elif st.session_state.page == "page2":
                         fields="id"
                     ).execute()["id"]
 
-                # Upload function
+                # Upload image
                 def upload_to_drive(file_bytes, prefix):
                     fname = f"{prefix}_{uuid.uuid4().hex}.jpg"
                     with open(fname, "wb") as f:
                         f.write(file_bytes)
 
                     media = MediaFileUpload(fname, mimetype="image/jpeg")
-                    uploaded = drive_service.files().create(
+                    file_uploaded = drive_service.files().create(
                         body={"name": fname, "parents": [folder_id]},
                         media_body=media,
                         fields="id"
                     ).execute()
 
-                    return f"https://drive.google.com/file/d/{uploaded['id']}/view"
+                    return f"https://drive.google.com/file/d/{file_uploaded['id']}/view"
 
-                # Upload pallet image
                 pallet_link = upload_to_drive(bytes_data, "PALLET")
 
-                # PT list → fill to 4 columns
+                # Ensure 4 PT columns
                 pt_vals = st.session_state.pt_list.copy()
                 while len(pt_vals) < 4:
                     pt_vals.append("")
 
                 now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-                # Append row into Google Sheet
+                # Save to Google Sheet
                 sheet.append_row([
                     now,
                     pt_vals[0],
@@ -230,4 +232,4 @@ elif st.session_state.page == "page2":
                 st.success("✅ บันทึกข้อมูลเรียบร้อยแล้ว!")
 
             except Exception as e:
-                st.error(f"❌ เกิดข้อผิดพลาด: {e}")
+                st.error(f"❌ Error: {e}")
