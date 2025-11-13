@@ -1,6 +1,9 @@
 streamlit
-pillow
+Pillow
+numpy
+pyzbar
 gspread
-requests
 google-auth
+google-auth-oauthlib
 google-api-python-client
+requests
